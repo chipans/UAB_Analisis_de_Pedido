@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UAB - Consolidador de Pedidos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @media (max-width: 640px) {
+            html { font-size: 13px; }
+            .container { padding-left: 0.5rem; padding-right: 0.5rem; }
+        }
+
+        .highlight {
+            background-color: rgba(52, 211, 153, 0.4) !important;
+            transition: background-color 0.3s ease;
+        }
+
+        .file-badge {
+            background-color: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: #cbd5e1;
+        }
+
+        /* Botón X de eliminar archivo individual */
+        .btn-remove-file {
+            color: #ef4444;
+            cursor: pointer;
+            transition: all 0.2s;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: none;
+            border: none;
+            /* MUY IMPORTANTE: asegura que el botón esté sobre el drop-zone */
+            position: relative;
+            z-index: 20;
+            pointer-events: all;
+        }
+        .btn-remove-file:hover {
+            background-color: rgba(239, 68, 68, 0.2);
+            transform: scale(1.1);
+        }
+
+        /* Botón de resetear / nuevo análisis */
+        #btn-reset {
+            transition: all 0.2s ease;
+        }
+        #btn-reset:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+        }
+
+        /* Animación fade-in para la sección de resultados */
+        #results-section {
+            animation: fadeInUp 0.4s ease;
+        }
+        #file-status-section {
+            animation: fadeInUp 0.4s ease;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .file-status-item {
+            transition: all 0.3s ease;
+            animation: fadeInUp 0.35s ease both;
+        }
+        .status-ok  { border-color: rgba(52,211,153,0.4); background-color: rgba(16,185,129,0.08); }
+        .status-ok  .status-icon  { color: #34d399; }
+        .status-ok  .status-label { color: #34d399; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; }
+        .status-err { border-color: rgba(239,68,68,0.4);  background-color: rgba(239,68,68,0.08); }
+        .status-err .status-icon  { color: #f87171; }
+        .status-err .status-label { color: #f87171; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; }
+        .status-pending { border-color: rgba(100,116,139,0.4); background-color: rgba(30,41,59,0.5); }
+        .status-pending .status-icon  { color: #94a3b8; }
+        .status-pending .status-label { color: #94a3b8; font-size:0.6rem; text-transform:uppercase; letter-spacing:0.08em; }
+
+        /* ── Sección de estado de archivos ── */
+        .file-status-card {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 1rem;
+            border-radius: 0.875rem;
+            border: 1px solid transparent;
+            transition: all 0.3s ease;
+            animation: fadeInUp 0.35s ease both;
+        }
+        .file-status-card.ok    { background-color:rgba(16,185,129,0.08); border-color:rgba(52,211,153,0.35); }
+        .file-status-card.error { background-color:rgba(239,68,68,0.08);  border-color:rgba(239,68,68,0.35); }
+        .file-status-card.pending { background-color:rgba(30,41,59,0.5);  border-color:rgba(100,116,139,0.3); }
+
+        .card-icon-wrap {
+            width:2rem; height:2rem; border-radius:50%;
+            display:flex; align-items:center; justify-content:center;
+            flex-shrink:0; font-size:0.95rem;
+        }
+        .file-status-card.ok      .card-icon-wrap { background:rgba(52,211,153,0.15); color:#34d399; }
+        .file-status-card.error   .card-icon-wrap { background:rgba(239,68,68,0.15);  color:#f87171; }
+        .file-status-card.pending .card-icon-wrap { background:rgba(100,116,139,0.15);color:#94a3b8; }
+
+        .card-name  { flex:1; font-size:0.72rem; font-weight:600; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+        .card-badge { font-size:0.58rem; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; padding:2px 8px; border-radius:9999px; white-space:nowrap; }
+        .file-status-card.ok      .card-badge { background:rgba(52,211,153,0.15); color:#34d399; }
+        .file-status-card.error   .card-badge { background:rgba(239,68,68,0.15);  color:#f87171; }
+        .file-status-card.pending .card-badge { background:rgba(100,116,139,0.15);color:#94a3b8; }
+        /* Estado azul: archivo válido pero sin la hoja del día buscado */
+        .file-status-card.noday { background-color:rgba(59,130,246,0.08); border-color:rgba(96,165,250,0.35); }
+        .file-status-card.noday .card-icon-wrap { background:rgba(96,165,250,0.15); color:#60a5fa; }
+        .file-status-card.noday .card-badge     { background:rgba(96,165,250,0.15); color:#60a5fa; }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-slate-900 to-slate-800 min-h-screen text-white font-sans selection:bg-blue-500/30">
+
+<div class="container mx-auto px-4 py-6 sm:py-10">
+
+    <!-- TÍTULO -->
+    <div class="text-center mb-8">
+        <h1 class="text-3xl sm:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-1">
+            Análisis de Pedidos
+        </h1>
+        <p class="text-slate-400 text-[10px] sm:text-sm tracking-widest uppercase">Universidad Adventista de Bolivia</p>
+    </div>
+
+    <!-- BADGES de archivos procesados (Flask) -->
+    {% if archivos %}
+    <div class="max-w-5xl mx-auto mb-6 flex flex-wrap justify-center gap-3">
+        {% for archivo in archivos %}
+        <div class="file-badge shadow-lg">
+            <i class="fas fa-check-circle text-emerald-500"></i>
+            <span class="font-medium">{{ archivo }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- FORMULARIO DE CARGA -->
+    <div class="max-w-2xl mx-auto bg-slate-800/40 p-5 rounded-3xl border border-slate-700 backdrop-blur-md shadow-2xl mb-8" id="upload-section">
+        <form id="upload-form">
+            <!--
+                CORRECCIÓN PRINCIPAL:
+                El área clickeable para abrir el file picker ahora es un div separado
+                que NO envuelve la lista de archivos. Así el stopPropagation del botón X
+                funciona correctamente sin que el padre lo intercepte.
+            -->
+            <div id="drop-zone" class="border-2 border-dashed border-slate-600 rounded-2xl transition-all bg-slate-800/20 relative overflow-hidden">
+                
+                <!-- Zona de click para seleccionar archivos (solo el área superior) -->
+                <div id="click-area"
+                     class="p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-slate-700/20 transition-all"
+                     onclick="document.getElementById('file-input').click()">
+                    <i class="fas fa-cloud-upload-alt text-4xl text-slate-500 mb-3 pointer-events-none"></i>
+                    <p class="text-xs text-slate-400 pointer-events-none">Selecciona los archivos Excel de pedidos</p>
+                </div>
+
+                <input type="file" id="file-input" multiple accept=".xlsx,.xls" class="hidden">
+
+                <!-- Lista de archivos seleccionados — FUERA del div clickeable -->
+                <div id="preview-list" class="hidden px-4 pb-4 border-t border-slate-700 pt-3 relative z-10">
+                    <ul id="files-names-list" class="text-xs text-slate-300 space-y-2"></ul>
+                </div>
+            </div>
+
+            <!-- Botón principal: consolidado total -->
+            <button type="submit" id="submit-btn"
+                    class="w-full mt-5 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-95 flex items-center justify-center">
+                <span id="btn-text"><i class="fas fa-layer-group mr-2"></i>PROCESAR Y CONSOLIDAR</span>
+                <span id="btn-loader" class="hidden">
+                    <i class="fas fa-spinner animate-spin mr-2"></i> PROCESANDO...
+                </span>
+            </button>
+
+            <!-- Divisor -->
+            <div class="flex items-center gap-3 mt-4">
+                <div class="flex-1 h-px bg-slate-700"></div>
+                <span class="text-[10px] text-slate-500 uppercase tracking-widest">o filtra por día</span>
+                <div class="flex-1 h-px bg-slate-700"></div>
+            </div>
+
+            <!-- Selector de día + botón Análisis por Día -->
+            <div class="flex gap-2 mt-3">
+                <select id="dia-select"
+                        onchange="actualizarColorSelect(this)"
+                        class="flex-1 bg-slate-900 border border-slate-600 rounded-xl px-3 py-2.5 text-xs outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all cursor-pointer text-slate-500">
+                    <option value="" disabled selected class="text-slate-500">Selecciona un día...</option>
+                    <option value="LUNES">Lunes</option>
+                    <option value="MARTES">Martes</option>
+                    <option value="MIERCOLES">Miércoles</option>
+                    <option value="JUEVES">Jueves</option>
+                    <option value="VIERNES">Viernes</option>
+                    <option value="SABADO">Sábado</option>
+                    <option value="DOMINGO">Domingo</option>
+                </select>
+                <button type="button" id="btn-dia"
+                        onclick="procesarPorDia()"
+                        class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-2 text-xs whitespace-nowrap">
+                    <i class="fas fa-calendar-day"></i>
+                    <span id="btn-dia-text">ANÁLISIS POR DÍA</span>
+                    <span id="btn-dia-loader" class="hidden"><i class="fas fa-spinner animate-spin"></i></span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+         SECCIÓN: ESTADO DE ARCHIVOS
+         Flask: variable `archivos_estado` lista de {nombre, ok, mensaje}
+         JS:    se rellena dinámicamente en mostrarEstadoArchivos()
+    ════════════════════════════════════════════════ -->
+    {% if archivos_estado %}
+    <div id="file-status-section" class="max-w-2xl mx-auto mb-6" style="animation:fadeInUp 0.4s ease">
+        <p class="text-[9px] uppercase tracking-widest text-slate-500 mb-3 text-center">Estado de archivos analizados</p>
+        <div class="flex flex-col gap-2">
+        {% for f in archivos_estado %}
+            <div class="file-status-card {{ f.estado if f.estado else ('ok' if f.ok else 'error') }}">
+                <div class="card-icon-wrap">
+                    {% if f.estado == 'noday' %}
+                        <i class="fas fa-calendar-times"></i>
+                    {% elif f.ok %}
+                        <i class="fas fa-check-circle"></i>
+                    {% else %}
+                        <i class="fas fa-times-circle"></i>
+                    {% endif %}
+                </div>
+                <span class="card-name" title="{{ f.nombre }}">{{ f.nombre }}</span>
+                <span class="card-badge">{{ f.mensaje if f.mensaje else ('Analizado' if f.ok else 'No procesado') }}</span>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Contenedor dinámico JS (cuando el backend no provee archivos_estado) -->
+    <div id="file-status-js" class="max-w-2xl mx-auto mb-6 hidden" style="animation:fadeInUp 0.4s ease">
+        <p class="text-[9px] uppercase tracking-widest text-slate-500 mb-3 text-center">Estado de archivos analizados</p>
+        <div id="file-status-list" class="flex flex-col gap-2"></div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+         SECCIÓN DE RESULTADOS
+         Incluye el botón X (Nuevo Análisis) en la esquina superior derecha
+    ════════════════════════════════════════════════ -->
+    {% if tablas %}
+    <div id="results-section" class="max-w-5xl mx-auto bg-slate-800/50 rounded-2xl border border-slate-700 shadow-2xl overflow-hidden mb-12">
+
+        <!-- Cabecera con título, búsqueda, descargas y botón CERRAR/RESETEAR -->
+        <div class="p-4 sm:p-6 border-b border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center">
+
+            <h2 class="text-base sm:text-xl font-bold text-emerald-400 whitespace-nowrap">
+                {% if dia_seleccionado %}
+                    <i class="fas fa-calendar-day mr-2 text-purple-400"></i>{{ dia_seleccionado | capitalize }}
+                {% else %}
+                    Total Consolidado
+                {% endif %}
+            </h2>
+
+            <!-- Búsqueda -->
+            <div class="relative w-full sm:max-w-xs flex gap-2">
+                <div class="relative flex-grow">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+                        <i class="fas fa-search text-xs"></i>
+                    </span>
+                    <input type="text" id="product-search" placeholder="Buscar producto..."
+                        class="block w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-slate-200 text-xs outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button type="button" onclick="ejecutarBusqueda()"
+                        class="bg-blue-600 hover:bg-blue-500 px-4 rounded-lg border border-blue-400 transition-colors flex items-center justify-center">
+                    <i class="fas fa-search text-white text-xs"></i>
+                </button>
+            </div>
+
+            <!-- Descargas -->
+            <div class="flex w-full sm:w-auto gap-2">
+                <a href="/descargar/excel"
+                   class="flex-grow sm:flex-none text-center bg-emerald-600 hover:bg-emerald-500 py-2 px-3 rounded-lg text-[10px] font-bold transition-colors">
+                    <i class="fas fa-file-excel mr-1"></i> EXCEL
+                </a>
+                <a href="/descargar/pdf"
+                   class="flex-grow sm:flex-none text-center bg-red-600 hover:bg-red-500 py-2 px-3 rounded-lg text-[10px] font-bold transition-colors">
+                    <i class="fas fa-file-pdf mr-1"></i> PDF
+                </a>
+            </div>
+
+            <!-- ✅ Botón X — Nuevo Análisis (siempre visible con texto) -->
+            <button id="btn-reset"
+                    onclick="resetearAnalisis()"
+                    title="Cerrar resultados y hacer un nuevo análisis"
+                    class="flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-red-600 border border-slate-500 hover:border-red-400 text-slate-300 hover:text-white font-bold py-2 px-3 sm:px-4 rounded-xl whitespace-nowrap w-full sm:w-auto text-[10px] sm:text-xs">
+                <i class="fas fa-times-circle text-sm sm:text-base"></i>
+                <span>NUEVO ANÁLISIS</span>
+            </button>
+        </div>
+
+        <!-- Tabla de resultados -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-slate-900/80 text-slate-500 text-[9px] uppercase">
+                        <th class="px-4 py-3 text-center w-8">N°</th>
+                        <th class="px-4 py-3">Producto</th>
+                        <th class="px-4 py-3">Unidad</th>
+                        <th class="px-4 py-3 text-right">Cant.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in tablas %}
+                    <tr class="border-t border-slate-700/50 product-row">
+                        <td class="px-4 py-3 text-center text-slate-500 text-xs">{{ loop.index }}</td>
+                        <td class="px-4 py-3 uppercase font-medium product-name text-xs">{{ fila['PRODUCTO'] }}</td>
+                        <td class="px-4 py-3 text-slate-400 text-[10px]">{{ fila['UNID. DE MEDIDA'] }}</td>
+                        <td class="px-4 py-3 text-right text-blue-400 font-bold text-xs">{{ "%.2f"|format(fila['CANTIDAD']|float) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div><!-- /container -->
+
+<script>
+/* ─────────────────────────────────────────────
+   GESTIÓN DE ARCHIVOS SELECCIONADOS
+───────────────────────────────────────────── */
+let selectedFiles = [];
+
+function onFileInputChange(e) {
+    const newFiles = Array.from(e.target.files);
+    newFiles.forEach(file => {
+        if (!selectedFiles.some(f => f.name === file.name)) {
+            selectedFiles.push(file);
+        }
+    });
+    updateFilePreview();
+    // NO limpiar e.target.value aquí — se gestiona en resetearAnalisis
+}
+
+document.getElementById('file-input').addEventListener('change', onFileInputChange);
+
+function updateFilePreview() {
+    const list      = document.getElementById('files-names-list');
+    const container = document.getElementById('preview-list');
+    list.innerHTML  = '';
+
+    if (selectedFiles.length > 0) {
+        container.classList.remove('hidden');
+
+        selectedFiles.forEach((file, index) => {
+            const li = document.createElement('li');
+            li.className = "flex justify-between items-center bg-slate-900/60 p-2 rounded-lg border border-slate-700";
+
+            // ── nombre del archivo ──
+            const nameSpan = document.createElement('span');
+            nameSpan.className = "truncate pr-2 text-xs";
+            nameSpan.innerHTML = '<i class="fas fa-file-excel mr-2 text-emerald-500"></i>' + file.name;
+
+            // ── botón X para quitar el archivo ──
+            const btn = document.createElement('button');
+            btn.type      = 'button';
+            btn.className = 'btn-remove-file';
+            btn.title     = 'Quitar archivo';
+            btn.innerHTML = '<i class="fas fa-times-circle text-lg"></i>';
+
+            // stopPropagation evita que el click suba al drop-zone / click-area
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                removeFile(index);
+            });
+
+            li.appendChild(nameSpan);
+            li.appendChild(btn);
+            list.appendChild(li);
+        });
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    updateFilePreview();
+}
+
+/* ─────────────────────────────────────────────
+   BÚSQUEDA EN LA TABLA
+───────────────────────────────────────────── */
+document.getElementById('product-search')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        ejecutarBusqueda();
+    }
+});
+
+/* ── El listener 'input' se elimina — búsqueda solo con Enter o botón ── */
+
+function ejecutarBusqueda() {
+    const term = document.getElementById('product-search').value.toLowerCase().trim();
+    const rows = document.querySelectorAll('.product-row');
+    rows.forEach(r => r.classList.remove('highlight'));
+    if (!term) return;
+
+    for (let r of rows) {
+        if (r.querySelector('.product-name').textContent.toLowerCase().includes(term)) {
+            r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            r.classList.add('highlight');
+            break;
+        }
+    }
+}
+
+/* ─────────────────────────────────────────────
+   ENVÍO DEL FORMULARIO
+   ⚠️ NO usamos document.write() — destruye la página.
+   En su lugar parseamos la respuesta e inyectamos
+   solo las partes que necesitamos en el DOM.
+───────────────────────────────────────────── */
+document.getElementById('upload-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    if (selectedFiles.length === 0) {
+        alert("Por favor selecciona al menos un archivo.");
+        return;
+    }
+
+    const btnText   = document.getElementById('btn-text');
+    const btnLoader = document.getElementById('btn-loader');
+    const submitBtn = document.getElementById('submit-btn');
+
+    submitBtn.disabled = true;
+    btnText.classList.add('hidden');
+    btnLoader.classList.remove('hidden');
+
+    // Guardar nombres ANTES del fetch (el array se limpia al resetear)
+    const archivosEnviados = selectedFiles.map(f => f.name);
+
+    // Mostrar estado "pendiente" inmediatamente
+    mostrarEstadoArchivos(archivosEnviados.map(n => ({ nombre: n, estado: 'pending' })));
+
+    const formData = new FormData();
+    selectedFiles.forEach(file => formData.append('archivos', file));
+
+    fetch('/procesar', { method: 'POST', body: formData })
+    .then(response => response.text())
+    .then(text => {
+        const parser = new DOMParser();
+        const doc    = parser.parseFromString(text, 'text/html');
+
+        // ── 1. Extraer la tabla de resultados de la respuesta ──
+        const nuevaTabla = doc.getElementById('results-section');
+
+        // Quitar tabla anterior si existía
+        const tablaVieja = document.getElementById('results-section');
+        if (tablaVieja) tablaVieja.remove();
+
+        if (nuevaTabla) {
+            // Insertar después de #file-status-js
+            const refNode = document.getElementById('file-status-js');
+            refNode.parentNode.insertBefore(nuevaTabla, refNode.nextSibling);
+
+            // Re-enlazar búsqueda porque el nodo es nuevo
+            const searchInput = document.getElementById('product-search');
+            if (searchInput) {
+                searchInput.addEventListener('keydown', function(ev) {
+                    if (ev.key === 'Enter') { ev.preventDefault(); ejecutarBusqueda(); }
+                });
+                searchInput.addEventListener('input', ejecutarBusqueda);
+            }
+        }
+
+        // ── 2. Leer archivos_estado del backend si los envía ──
+        const dataEl = doc.getElementById('archivos-estado-data');
+        if (dataEl) {
+            try {
+                mostrarEstadoArchivos(JSON.parse(dataEl.textContent));
+            } catch(_) {
+                mostrarEstadoArchivos(archivosEnviados.map(n => ({ nombre: n, estado: 'ok' })));
+            }
+        } else {
+            // Sin datos del backend → marcar todos OK si hay tabla, error si no
+            const estado = nuevaTabla ? 'ok' : 'error';
+            const msg    = nuevaTabla ? 'Analizado' : 'Sin datos';
+            mostrarEstadoArchivos(archivosEnviados.map(n => ({ nombre: n, estado, mensaje: msg })));
+        }
+
+        // ── 3. Restaurar botón y ocultar zona de archivos ──
+        submitBtn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoader.classList.add('hidden');
+        ocultarZonaArchivos();
+
+        // Scroll suave a los resultados
+        if (nuevaTabla) {
+            setTimeout(() => nuevaTabla.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        }
+    })
+    .catch(() => {
+        mostrarEstadoArchivos(archivosEnviados.map(n => ({ nombre: n, estado: 'error', mensaje: 'Error al subir' })));
+        alert("Error al procesar los archivos. Intenta nuevamente.");
+        submitBtn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoader.classList.add('hidden');
+    });
+});
+
+/* ─────────────────────────────────────────────
+   ✅ ESTADO DE ARCHIVOS
+   Recibe array de objetos: { nombre, estado ('ok'|'error'|'pending'), mensaje? }
+   y los renderiza en #file-status-js
+───────────────────────────────────────────── */
+function mostrarEstadoArchivos(archivos) {
+    const section = document.getElementById('file-status-js');
+    const list    = document.getElementById('file-status-list');
+    if (!section || !list) return;
+
+    list.innerHTML = '';
+
+    if (!archivos || archivos.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    const iconMap  = { ok: 'fa-check-circle', error: 'fa-times-circle', pending: 'fa-spinner fa-spin', noday: 'fa-calendar-times' };
+    const labelMap = { ok: 'Analizado', error: 'No procesado', pending: 'Procesando…', noday: 'Sin este día' };
+
+    archivos.forEach((f, i) => {
+        const estado = f.estado || (f.ok === true ? 'ok' : f.ok === false ? 'error' : 'pending');
+        const card   = document.createElement('div');
+        card.className = `file-status-card ${estado}`;
+        card.style.animationDelay = (i * 60) + 'ms';
+
+        card.innerHTML =
+            `<div class="card-icon-wrap"><i class="fas ${iconMap[estado] || 'fa-file'}"></i></div>` +
+            `<span class="card-name" title="${f.nombre}">${f.nombre}</span>` +
+            `<span class="card-badge">${f.mensaje || labelMap[estado] || estado}</span>`;
+
+        list.appendChild(card);
+    });
+
+    section.classList.remove('hidden');
+}
+
+/* ─────────────────────────────────────────────
+   ✅ RESETEAR — volver al estado inicial
+   Limpia resultados, estado de archivos,
+   lista de archivos y re-habilita el input.
+───────────────────────────────────────────── */
+function resetearAnalisis() {
+    const fadeOut = (el, cb) => {
+        if (!el) return cb && cb();
+        el.style.transition = 'opacity 0.3s ease';
+        el.style.opacity    = '0';
+        setTimeout(() => { el.remove(); cb && cb(); }, 320);
+    };
+
+    // 1. Ocultar tabla de resultados
+    fadeOut(document.getElementById('results-section'));
+
+    // 2. Ocultar estado de archivos JS
+    const statusJs = document.getElementById('file-status-js');
+    if (statusJs) {
+        statusJs.style.transition = 'opacity 0.3s ease';
+        statusJs.style.opacity    = '0';
+        setTimeout(() => {
+            statusJs.classList.add('hidden');
+            statusJs.style.opacity = '';
+            document.getElementById('file-status-list').innerHTML = '';
+        }, 320);
+    }
+
+    // 3. Ocultar estado Flask (si existe tras recargar)
+    fadeOut(document.getElementById('file-status-section'));
+
+    // 4. Limpiar archivos seleccionados y mostrar zona de archivos
+    selectedFiles = [];
+    updateFilePreview();
+    mostrarZonaArchivos();
+
+    // 5. Resetear input file
+    const fileInput = document.getElementById('file-input');
+    fileInput.value = '';
+    const nuevoInput = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(nuevoInput, fileInput);
+    nuevoInput.addEventListener('change', onFileInputChange);
+}
+/* ─────────────────────────────────────────────
+   COLOR DEL SELECT (placeholder gris / opción blanca)
+───────────────────────────────────────────── */
+function actualizarColorSelect(sel) {
+    sel.style.color = sel.value === '' ? '#64748b' : '#e2e8f0';
+}
+// Aplicar al cargar
+actualizarColorSelect(document.getElementById('dia-select'));
+
+/* ─────────────────────────────────────────────
+   OCULTAR / MOSTRAR lista de archivos
+   (el botón "Seleccionar archivo" siempre visible)
+───────────────────────────────────────────── */
+function ocultarZonaArchivos() {
+    // Solo ocultar la lista de archivos agregados, NO el botón de seleccionar
+    const lista = document.getElementById('preview-list');
+    if (lista) {
+        lista.style.transition = 'opacity 0.3s ease, max-height 0.3s ease';
+        lista.style.opacity    = '0';
+        lista.style.maxHeight  = '0';
+        lista.style.overflow   = 'hidden';
+        lista.style.padding    = '0';
+    }
+}
+
+function mostrarZonaArchivos() {
+    const lista = document.getElementById('preview-list');
+    if (lista) {
+        lista.style.transition = 'opacity 0.3s ease, max-height 0.4s ease';
+        lista.style.maxHeight  = '500px';
+        lista.style.overflow   = '';
+        lista.style.padding    = '';
+        setTimeout(() => { lista.style.opacity = '1'; }, 50);
+    }
+}
+
+/* ─────────────────────────────────────────────
+   RESETEAR — volver al estado inicial
+───────────────────────────────────────────── */
+function resetearAnalisis() {
+    const fadeOut = (el) => {
+        if (!el) return;
+        el.style.transition = 'opacity 0.3s ease';
+        el.style.opacity    = '0';
+        setTimeout(() => { el.remove(); }, 320);
+    };
+
+    // 1. Ocultar tabla de resultados
+    fadeOut(document.getElementById('results-section'));
+
+    // 2. Ocultar estado de archivos JS
+    const statusJs = document.getElementById('file-status-js');
+    if (statusJs) {
+        statusJs.style.transition = 'opacity 0.3s ease';
+        statusJs.style.opacity    = '0';
+        setTimeout(() => {
+            statusJs.classList.add('hidden');
+            statusJs.style.opacity = '';
+            document.getElementById('file-status-list').innerHTML = '';
+        }, 320);
+    }
+
+    // 3. Ocultar estado Flask
+    fadeOut(document.getElementById('file-status-section'));
+
+    // 4. Mostrar zona de archivos nuevamente
+    mostrarZonaArchivos();
+
+    // 5. Limpiar archivos seleccionados
+    selectedFiles = [];
+    updateFilePreview();
+
+    // 6. Resetear input file
+    const fileInput = document.getElementById('file-input');
+    fileInput.value = '';
+    const nuevoInput = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(nuevoInput, fileInput);
+    nuevoInput.addEventListener('change', onFileInputChange);
+
+    // 7. Resetear selector de día al placeholder
+    const diaSelect = document.getElementById('dia-select');
+    diaSelect.value = '';
+    actualizarColorSelect(diaSelect);
+
+    // 8. Restaurar botones
+    const submitBtn = document.getElementById('submit-btn');
+    submitBtn.disabled = false;
+    document.getElementById('btn-text').classList.remove('hidden');
+    document.getElementById('btn-loader').classList.add('hidden');
+
+    const btnDia = document.getElementById('btn-dia');
+    btnDia.disabled = false;
+    document.getElementById('btn-dia-text').classList.remove('hidden');
+    document.getElementById('btn-dia-loader').classList.add('hidden');
+
+    // 9. Scroll al formulario
+    document.getElementById('upload-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ─────────────────────────────────────────────
+   ANÁLISIS POR DÍA
+   Envía los archivos + el día seleccionado
+   al endpoint /procesar-dia
+───────────────────────────────────────────── */
+function procesarPorDia() {
+    const dia = document.getElementById('dia-select').value;
+    if (!dia) {
+        alert("Por favor selecciona un día.");
+        return;
+    }
+    if (selectedFiles.length === 0) {
+        alert("Por favor selecciona al menos un archivo Excel.");
+        return;
+    }
+
+    const btnDia       = document.getElementById('btn-dia');
+    const btnDiaText   = document.getElementById('btn-dia-text');
+    const btnDiaLoader = document.getElementById('btn-dia-loader');
+    const submitBtn    = document.getElementById('submit-btn');
+
+    btnDia.disabled    = true;
+    submitBtn.disabled = true;
+    btnDiaText.classList.add('hidden');
+    btnDiaLoader.classList.remove('hidden');
+
+    const archivosEnviados = selectedFiles.map(f => f.name);
+    mostrarEstadoArchivos(archivosEnviados.map(n => ({ nombre: n, estado: 'pending' })));
+
+    const formData = new FormData();
+    selectedFiles.forEach(file => formData.append('archivos', file));
+    formData.append('dia', dia);
+
+    fetch('/procesar-dia', { method: 'POST', body: formData })
+    .then(r => r.text())
+    .then(text => {
+        const parser     = new DOMParser();
+        const doc        = parser.parseFromString(text, 'text/html');
+        const nuevaTabla = doc.getElementById('results-section');
+
+        const tablaVieja = document.getElementById('results-section');
+        if (tablaVieja) tablaVieja.remove();
+
+        if (nuevaTabla) {
+            const refNode = document.getElementById('file-status-js');
+            refNode.parentNode.insertBefore(nuevaTabla, refNode.nextSibling);
+
+            const searchInput = document.getElementById('product-search');
+            if (searchInput) {
+                searchInput.addEventListener('keydown', ev => {
+                    if (ev.key === 'Enter') { ev.preventDefault(); ejecutarBusqueda(); }
+                });
+                searchInput.addEventListener('input', ejecutarBusqueda);
+            }
+            setTimeout(() => nuevaTabla.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        }
+
+        const dataEl = doc.getElementById('archivos-estado-data');
+        if (dataEl) {
+            try { mostrarEstadoArchivos(JSON.parse(dataEl.textContent)); } catch(_) {}
+        } else {
+            const estado = nuevaTabla ? 'ok' : 'error';
+            const msg    = nuevaTabla ? 'Hoja encontrada' : 'Sin hoja para ese día';
+            mostrarEstadoArchivos(archivosEnviados.map(n => ({ nombre: n, estado, mensaje: msg })));
+        }
+
+        btnDia.disabled    = false;
+        submitBtn.disabled = false;
+        btnDiaText.classList.remove('hidden');
+        btnDiaLoader.classList.add('hidden');
+        ocultarZonaArchivos();
+    })
+    .catch(() => {
+        mostrarEstadoArchivos(archivosEnviados.map(n => ({ nombre: n, estado: 'error', mensaje: 'Error' })));
+        alert("Error al procesar por día.");
+        btnDia.disabled    = false;
+        submitBtn.disabled = false;
+        btnDiaText.classList.remove('hidden');
+        btnDiaLoader.classList.add('hidden');
+    });
+}
+</script>
+
+</body>
+</html>
